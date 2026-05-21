@@ -45,6 +45,14 @@ jobs:
           fi
         shell: bash
 
+      - name: Prepare Environment Variables
+        env:
+          UNIT_LIST_JSON_SECRET: ${{ secrets.UNIT_LIST_JSON }}
+        run: |
+          # Remove newlines from the JSON secret to avoid truncation in the deploy step
+          UNIT_JSON_MINIFIED=$(echo "$UNIT_LIST_JSON_SECRET" | tr -d '\n' | tr -d '\r')
+          echo "UNIT_LIST_JSON_MINIFIED=$UNIT_JSON_MINIFIED" >> $GITHUB_ENV
+
       # Pinned to google-github-actions/deploy-cloud-functions@v4.0.0
       - name: Deploy Cloud Function
         id: deploy
@@ -71,7 +79,7 @@ jobs:
             SIGNALWIRE_TOKEN=${{ secrets.SIGNALWIRE_TOKEN }}
             SIGNALWIRE_SPACE_URL=${{ secrets.SIGNALWIRE_SPACE_URL }}
             SIGNALWIRE_FROM_NUMBER=${{ secrets.SIGNALWIRE_FROM_NUMBER }}
-            UNIT_LIST_JSON=${{ secrets.UNIT_LIST_JSON }}
+            UNIT_LIST_JSON=${{ env.UNIT_LIST_JSON_MINIFIED }}
 
       # Clean up old Cloud Run revisions (Gen 2 functions)
       - name: Clean up old revisions
