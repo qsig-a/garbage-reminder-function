@@ -27,6 +27,24 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
 
+      # Mask sensitive GCP Project Identifiers in console logs
+      - name: Mask GCP Project Identifiers
+        run: |
+          SA_EMAIL="${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}"
+          if [ ! -z "$SA_EMAIL" ]; then
+            PROJECT_ID=$(echo "$SA_EMAIL" | cut -d'@' -f2 | cut -d'.' -f1)
+            if [ ! -z "$PROJECT_ID" ]; then
+              echo "::add-mask::$PROJECT_ID"
+            fi
+          fi
+          if [ ! -z "$PROJECT_ID" ]; then
+            PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)" 2>/dev/null || true)
+            if [ ! -z "$PROJECT_NUMBER" ]; then
+              echo "::add-mask::$PROJECT_NUMBER"
+            fi
+          fi
+        shell: bash
+
       # Pinned to google-github-actions/deploy-cloud-functions@v4.0.0
       - name: Deploy Cloud Function
         id: deploy
