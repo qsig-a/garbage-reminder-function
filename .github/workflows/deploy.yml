@@ -49,8 +49,9 @@ jobs:
         env:
           UNIT_LIST_JSON_SECRET: ${{ secrets.UNIT_LIST_JSON }}
         run: |
-          # Remove newlines from the JSON secret to avoid truncation in the deploy step
-          UNIT_JSON_MINIFIED=$(echo "$UNIT_LIST_JSON_SECRET" | tr -d '\n' | tr -d '\r')
+          # Remove newlines to avoid truncation, and escape commas with a backslash
+          # because the deploy-cloud-functions action treats commas as delimiters.
+          UNIT_JSON_MINIFIED=$(echo "$UNIT_LIST_JSON_SECRET" | tr -d '\n' | tr -d '\r' | sed 's/,/\\,/g')
           echo "UNIT_LIST_JSON_MINIFIED=$UNIT_JSON_MINIFIED" >> $GITHUB_ENV
 
       # Pinned to google-github-actions/deploy-cloud-functions@v4.0.0
