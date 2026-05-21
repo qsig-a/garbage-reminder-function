@@ -56,7 +56,14 @@ def load_unit_list():
         try:
             return json.loads(unit_list_json)
         except Exception as e:
-            print(f"Error parsing UNIT_LIST_JSON environment variable: {e}")
+            print(f"Error parsing UNIT_LIST_JSON with json.loads: {e}")
+            try:
+                import ast
+                parsed_list = ast.literal_eval(unit_list_json)
+                print("Successfully parsed UNIT_LIST_JSON using ast.literal_eval (Python dict format).")
+                return parsed_list
+            except Exception as e2:
+                print(f"Error parsing UNIT_LIST_JSON with ast.literal_eval: {e2}")
     
     # 2. Try to load from units.json file (default or configured via UNIT_LIST_FILE)
     unit_list_file = os.environ.get("UNIT_LIST_FILE", "units.json")
