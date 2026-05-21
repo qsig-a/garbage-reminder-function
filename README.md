@@ -297,6 +297,7 @@ To trigger the Cloud Function automatically every day (e.g. at 5:00 PM Eastern),
 4. **URL**: The URL of your deployed Cloud Function endpoint (obtained from your GitHub Actions deployment logs or Cloud Console).
 5. **HTTP Method**: GET
 6. **Auth Header**: **Add OIDC token**
-7. **Service Account**: Select a service account with `Cloud Functions Invoker` (or `Cloud Run Invoker` for 2nd Gen) permissions to invoke the function securely.
+7. **Service Account**: Select a service account (e.g., your deployment service account) that has the **Cloud Run Invoker** (`roles/run.invoker`) role granted to it.
+8. **Audience**: Paste the exact same URL from step 4. (This is strictly required for 2nd Gen functions).
 
 This secures the endpoint, preventing unauthenticated external users from triggering text alerts manually!
