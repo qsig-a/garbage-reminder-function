@@ -72,3 +72,29 @@ jobs:
             SIGNALWIRE_SPACE_URL=${{ secrets.SIGNALWIRE_SPACE_URL }}
             SIGNALWIRE_FROM_NUMBER=${{ secrets.SIGNALWIRE_FROM_NUMBER }}
             UNIT_LIST_JSON=${{ secrets.UNIT_LIST_JSON }}
+
+      # Clean up old Cloud Run revisions (Gen 2 functions)
+      - name: Clean up old revisions
+        if: success()
+        run: |
+          REGION="${{ vars.GCP_REGION || 'us-east1' }}"
+          SERVICE_NAME="garbage-reminder-function"
+          
+          echo "Looking for old revisions of $SERVICE_NAME in $REGION..."
+          # Fetch revisions, sort by creation time descending (newest first)
+          REVISIONS=$(gcloud run revisions list --service="$SERVICE_NAME" --region="$REGION" --format="value(metadata.name)" --sort-by="~metadata.creationTimestamp" 2>/dev/null || true)
+          
+          if [ -z "$REVISIONS" ]; then
+            echo "No revisions found or not a Cloud Run / Gen 2 function."
+            exit 0
+          fi
+          
+          KEEP=1
+          COUNT=0
+          for REVISION in $REVISIONS; do
+            COUNT=$((COUNT+1))
+            if [ $COUNT -gt $KEEP ]; then
+              echo "Deleting old revision: $REVISION"
+              gcloud run revisions delete "$REVISION" --region="$REGION" --quiet || true
+            fi
+          done
