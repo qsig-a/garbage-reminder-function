@@ -183,6 +183,15 @@ gcloud iam workload-identity-pools providers create-oidc "$WORKLOAD_PROVIDER" \
 gcloud iam service-accounts add-iam-policy-binding "$SERVICE_ACCOUNT_EMAIL" \
     --role="roles/iam.workloadIdentityUser" \
     --member="principalSet://iam.googleapis.com/projects/$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')/locations/global/workloadIdentityPools/$WORKLOAD_POOL/attribute.repository/$REPO_OWNER/$REPO_NAME"
+
+# 4. Grant your Service Account permissions to deploy Cloud Functions
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/cloudfunctions.developer"
+
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/iam.serviceAccountUser"
 ```
 
 #### Option B: Windows (PowerShell)
@@ -216,6 +225,15 @@ $PROJECT_NUMBER = (gcloud projects describe $PROJECT_ID --format="value(projectN
 gcloud iam service-accounts add-iam-policy-binding $SERVICE_ACCOUNT_EMAIL `
     --role="roles/iam.workloadIdentityUser" `
     --member="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$WORKLOAD_POOL/attribute.repository/$REPO_OWNER/$REPO_NAME"
+
+# 4. Grant your Service Account permissions to deploy Cloud Functions
+gcloud projects add-iam-policy-binding $PROJECT_ID `
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" `
+    --role="roles/cloudfunctions.developer"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID `
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" `
+    --role="roles/iam.serviceAccountUser"
 ```
 
 Once completed, retrieve your **Workload Identity Provider identifier** using:
