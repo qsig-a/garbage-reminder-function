@@ -1,0 +1,56 @@
+name: Deploy to Google Cloud Functions
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: 'read'
+  id-token: 'write'
+
+jobs:
+  deploy:
+    name: Deploy Cloud Function
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to actions/checkout@v6.0.2
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      # Pinned to google-github-actions/auth@v3.0.0
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      # Pinned to google-github-actions/deploy-cloud-functions@v4.0.0
+      - name: Deploy Cloud Function
+        id: deploy
+        uses: google-github-actions/deploy-cloud-functions@ab10d6b9be21630aafc15ced4c464c16cd6640d6
+        with:
+          name: 'garbage-reminder-function'
+          runtime: 'python312'
+          entry_point: 'main'
+          region: ${{ vars.GCP_REGION || 'us-east1' }}
+          # 2nd generation is the modern Google Cloud recommended standard
+          # Customize 'gen2' or 'gen1' as per preference in GCF
+          # Note: gen2 requires Cloud Run Admin and Artifact Registry permissions
+          # for the service account running the deployment.
+          # Change to gen1 if using 1st generation Cloud Functions.
+          # Here we default to gen2 for best performance.
+          # For more details, see the README.
+          # To keep it backwards-compatible, gen1 can also be used. We'll default to gen2 but add notes.
+          # We can also configure VPC settings or public accessibility:
+          # allow_unauthenticated: false # recommended for cron/scheduler invocations
+          # (To secure the function, you should invoke it via Cloud Scheduler with OIDC token auth)
+          environment_variables: |
+            CALENDAR_ID=${{ secrets.CALENDAR_ID }}
+            SIGNALWIRE_PROJECT_ID=${{ secrets.SIGNALWIRE_PROJECT_ID }}
+            SIGNALWIRE_TOKEN=${{ secrets.SIGNALWIRE_TOKEN }}
+            SIGNALWIRE_SPACE_URL=${{ secrets.SIGNALWIRE_SPACE_URL }}
+            SIGNALWIRE_FROM_NUMBER=${{ secrets.SIGNALWIRE_FROM_NUMBER }}
+            UNIT_LIST_JSON=${{ secrets.UNIT_LIST_JSON }}
