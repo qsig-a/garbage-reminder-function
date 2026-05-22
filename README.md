@@ -44,6 +44,7 @@ flowchart TD
 - 🔑 **Standardized Authentication**: Leverages standard Google Application Default Credentials (ADC), integrating transparently with GCP's metadata service in production and secure local credential files during development.
 - 🚀 **CI/CD Automation**: Deploys securely from GitHub to GCP via GitHub Actions using strict, pinned commit SHAs to prevent supply chain vulnerabilities.
 - ⚙️ **Local Testing Experience**: Supports seamless local development using Python's `functions-framework` and `.env`/`units.json` fallback mechanics.
+- 🇨🇦 **Holiday-Aware Reminders**: Pulls Canadian statutory holidays from [canada-holidays.ca](https://canada-holidays.ca/api). When a holiday falls in the same Mon–Sun week as the pickup, appends a delay notice to the SMS. Garbage is only delayed by Dec 25 / Jan 1; recycling and green bin are delayed by any holiday in the pickup week.
 
 ---
 
@@ -59,6 +60,7 @@ The function requires the following configuration environment variables in produ
 | `SIGNALWIRE_SPACE_URL` | SignalWire Space domain | `your-space.signalwire.com` |
 | `SIGNALWIRE_FROM_NUMBER` | The SignalWire phone number used as the SMS sender | `+15555550100` |
 | `UNIT_LIST_JSON` | A JSON-formatted mapping of units to recipient phone numbers | *See "Resident Directory Format" below* |
+| `HOLIDAYS_PROVINCE` *(optional)* | Two-letter Canadian province code used to look up statutory holidays. Defaults to `ON`. | `ON`, `QC`, `BC`, ... |
 
 ### Resident Directory Format
 The mapping matches the summary in Google Calendar (e.g. if the event name contains `"123 Unit A"`, it matches the unit `"123 Unit A"`).

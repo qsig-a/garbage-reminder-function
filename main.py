@@ -1,6 +1,9 @@
 import datetime
 import json
 import os
+import time
+import urllib.request
+
 import pytz
 
 import functions_framework
@@ -11,6 +14,11 @@ from signalwire.rest import Client as signalwire_client
 
 # Define the scopes needed for Google Calendar access
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+
+HOLIDAYS_API_BASE = "https://canada-holidays.ca/api/v1/provinces"
+HOLIDAY_API_RETRIES = 3
+HOLIDAY_API_RETRY_DELAY_SEC = 10
+DELAY_NOTICE = "Holiday this week — pickup may be delayed by 24h."
 
 def load_credentials():
     """
@@ -121,6 +129,64 @@ def get_garbage_info(events):
             garbage_type = summary.replace("Pickup - ", "")
     return unit_number, garbage_type
 
+def fetch_province_holidays(province, year):
+    """Fetch statutory holidays for a Canadian province and year from canada-holidays.ca.
+
+    Retries on failure. Returns [] if all attempts fail so the reminder still goes out.
+    """
+    url = f"{HOLIDAYS_API_BASE}/{province}?year={year}"
+    last_err = None
+    for attempt in range(1, HOLIDAY_API_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(f"non-200 status: {resp.status}")
+                data = json.loads(resp.read().decode("utf-8"))
+            return data.get("province", {}).get("holidays", []) or []
+        except Exception as e:
+            last_err = e
+            print(f"Holiday API attempt {attempt}/{HOLIDAY_API_RETRIES} failed for {province} {year}: {e}")
+            if attempt < HOLIDAY_API_RETRIES:
+                time.sleep(HOLIDAY_API_RETRY_DELAY_SEC)
+    print(f"Holiday API exhausted retries for {province} {year}: {last_err}")
+    return []
+
+def get_pickup_week_range(pickup_date):
+    """Returns (Monday, Sunday) date pair for the calendar week containing pickup_date."""
+    monday = pickup_date - datetime.timedelta(days=pickup_date.weekday())
+    sunday = monday + datetime.timedelta(days=6)
+    return monday, sunday
+
+def holidays_in_week(holidays, week_start, week_end):
+    matches = []
+    for h in holidays:
+        try:
+            d = datetime.date.fromisoformat(h["date"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if week_start <= d <= week_end:
+            matches.append(h)
+    return matches
+
+def is_pickup_delayed(garbage_type, week_holidays):
+    """Apply per-bin holiday delay rules.
+
+    Garbage is only delayed by Dec 25 or Jan 1. Recycling and Green Bin are delayed
+    by any holiday in the pickup week.
+    """
+    if not week_holidays:
+        return False
+    if "garbage" in garbage_type.lower():
+        for h in week_holidays:
+            try:
+                d = datetime.date.fromisoformat(h["date"])
+            except (KeyError, ValueError, TypeError):
+                continue
+            if (d.month == 12 and d.day == 25) or (d.month == 1 and d.day == 1):
+                return True
+        return False
+    return True
+
 def send_message(body, phone_number):
     """Sends an SMS message using SignalWire REST API."""
     project_id = os.environ.get("SIGNALWIRE_PROJECT_ID")
@@ -178,6 +244,19 @@ def main(request):
     
     if unit_number is not None and garbage_type is not None:
         message = f"Reminder {unit_number}! Waste Connections will pickup {garbage_type.lower()} tomorrow."
+
+        province = os.environ.get("HOLIDAYS_PROVINCE", "ON")
+        eastern = pytz.timezone("US/Eastern")
+        tomorrow = (datetime.datetime.now(pytz.utc).astimezone(eastern).date()
+                    + datetime.timedelta(days=1))
+        week_start, week_end = get_pickup_week_range(tomorrow)
+        holidays = []
+        for y in {week_start.year, week_end.year}:
+            holidays.extend(fetch_province_holidays(province, y))
+        week_holidays = holidays_in_week(holidays, week_start, week_end)
+        if is_pickup_delayed(garbage_type, week_holidays):
+            message = f"{message} {DELAY_NOTICE}"
+
         unit_list = load_unit_list()
         phone_numbers = unit_list.get(unit_number, [])
         
