@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import re
 import time
 import urllib.request
 
@@ -117,17 +118,33 @@ def get_events_for_tomorrow(service, start, end):
         print(f"Error fetching events from Google Calendar '{calendar_id}': {e}")
         return []
 
-def get_garbage_info(events):
-    """Parses events to extract unit number and pickup waste type information."""
-    unit_number = ''
-    garbage_type = ''
-    for event in events:
-        summary = event.get('summary', '')
-        if "Unit" in summary:
-            unit_number = summary
-        elif "Pickup" in summary:
-            garbage_type = summary.replace("Pickup - ", "")
-    return unit_number, garbage_type
+# Calendar events are titled "<unit> - <waste type>", e.g. "192A - Green Bin".
+EVENT_SUMMARY_PATTERN = re.compile(r"^\s*(?P<unit>.+?)\s+[-\u2013\u2014]\s+(?P<type>.+?)\s*$")
+
+def parse_pickup_event(event):
+    """Parses a single "<unit> - <waste type>" event into (unit_number, garbage_type).
+
+    Returns (None, None) if the event summary doesn't match the expected format.
+    """
+    summary = event.get('summary', '')
+    match = EVENT_SUMMARY_PATTERN.match(summary)
+    if not match:
+        return None, None
+    return match.group('unit'), match.group('type')
+
+def normalize_unit_key(unit):
+    """Normalizes a unit label so "192A", "192 A" and "192 Unit A" all compare equal."""
+    return re.sub(r"[^0-9a-z]", "", unit.lower().replace("unit", ""))
+
+def find_phone_numbers(unit_list, unit_number):
+    """Looks up recipients for a unit, falling back to a normalized key match."""
+    if unit_number in unit_list:
+        return unit_list[unit_number]
+    target = normalize_unit_key(unit_number)
+    for key, numbers in unit_list.items():
+        if normalize_unit_key(key) == target:
+            return numbers
+    return []
 
 def fetch_province_holidays(province, year):
     """Fetch statutory holidays for a Canadian province and year from canada-holidays.ca.
@@ -230,47 +247,50 @@ def main(request):
     if not events:
         return "No events found for tomorrow."
 
-    unit_number = None
-    garbage_type = None
-
+    pickups = []
     for event in events:
-        event_unit_number, event_garbage_type = get_garbage_info([event])
-        if event_unit_number:
-            unit_number = event_unit_number
-        if event_garbage_type:
-            garbage_type = event_garbage_type
+        unit_number, garbage_type = parse_pickup_event(event)
+        if unit_number and garbage_type:
+            pickups.append((unit_number, garbage_type))
+        else:
+            print(f"Skipping event with unrecognized summary: {event.get('summary', '')!r}")
 
+    if not pickups:
+        return "No garbage pickup events found for tomorrow."
+
+    province = os.environ.get("HOLIDAYS_PROVINCE", "ON")
+    eastern = pytz.timezone("US/Eastern")
+    tomorrow = (datetime.datetime.now(pytz.utc).astimezone(eastern).date()
+                + datetime.timedelta(days=1))
+    week_start, week_end = get_pickup_week_range(tomorrow)
+    holidays = []
+    for y in {week_start.year, week_end.year}:
+        holidays.extend(fetch_province_holidays(province, y))
+    week_holidays = holidays_in_week(holidays, week_start, week_end)
+
+    unit_list = load_unit_list()
     message_sids = []
-    
-    if unit_number is not None and garbage_type is not None:
-        message = f"Reminder {unit_number}! Waste Connections will pickup {garbage_type.lower()} tomorrow."
+    missing_units = []
 
-        province = os.environ.get("HOLIDAYS_PROVINCE", "ON")
-        eastern = pytz.timezone("US/Eastern")
-        tomorrow = (datetime.datetime.now(pytz.utc).astimezone(eastern).date()
-                    + datetime.timedelta(days=1))
-        week_start, week_end = get_pickup_week_range(tomorrow)
-        holidays = []
-        for y in {week_start.year, week_end.year}:
-            holidays.extend(fetch_province_holidays(province, y))
-        week_holidays = holidays_in_week(holidays, week_start, week_end)
+    for unit_number, garbage_type in pickups:
+        message = f"Reminder {unit_number}! Waste Connections will pickup {garbage_type.lower()} tomorrow."
         if is_pickup_delayed(garbage_type, week_holidays):
             message = f"{message} {DELAY_NOTICE}"
 
-        unit_list = load_unit_list()
-        phone_numbers = unit_list.get(unit_number, [])
-        
+        phone_numbers = find_phone_numbers(unit_list, unit_number)
         if not phone_numbers:
             print(f"Warning: No phone numbers configured for unit '{unit_number}'.")
-            return f"No phone numbers configured for unit: {unit_number}"
-            
+            missing_units.append(unit_number)
+            continue
+
         for number in phone_numbers:
             try:
                 sid = send_message(message, number)
                 message_sids.append(sid)
             except Exception as e:
                 print(f"Failed to send SMS to {number}: {e}")
-                
-        return {"status": "success", "message_sids": message_sids}
-    else:
-        return "No garbage pickup events found for tomorrow."
+
+    if missing_units and not message_sids:
+        return f"No phone numbers configured for unit: {', '.join(missing_units)}"
+
+    return {"status": "success", "message_sids": message_sids}

@@ -62,23 +62,26 @@ The function requires the following configuration environment variables in produ
 | `UNIT_LIST_JSON` | A JSON-formatted mapping of units to recipient phone numbers | *See "Resident Directory Format" below* |
 | `HOLIDAYS_PROVINCE` *(optional)* | Two-letter Canadian province code used to look up statutory holidays. Defaults to `ON`. | `ON`, `QC`, `BC`, ... |
 
+### Calendar Event Format
+Each pickup is a single calendar event titled `<unit> - <waste type>`, for example `192A - Green Bin`, `190B - Garbage` or `192C - Recycling`. The text before the dash is the unit and the text after it is the waste type used in the SMS. Events that don't match this format are skipped.
+
 ### Resident Directory Format
-The mapping matches the summary in Google Calendar (e.g. if the event name contains `"123 Unit A"`, it matches the unit `"123 Unit A"`).
+The mapping is keyed by the unit portion of the event title (e.g. the event `"123A - Garbage"` matches the unit `"123A"`). Keys are also matched loosely, ignoring case, spaces and the word "Unit", so an existing key like `"123 Unit A"` still matches `123A`.
 
 #### Env Var Format (`UNIT_LIST_JSON`):
 ```json
-{"123 Unit A": ["+15555550101", "+15555550102"], "123 Unit B": ["+15555550101", "+15555550103"]}
+{"123A": ["+15555550101", "+15555550102"], "123B": ["+15555550101", "+15555550103"]}
 ```
 
 #### Local File Format (`units.json`):
 Place this in the root directory for local testing. It is automatically ignored by Git.
 ```json
 {
-  "123 Unit A": [
+  "123A": [
     "+15555550101",
     "+15555550102"
   ],
-  "123 Unit B": [
+  "123B": [
     "+15555550101",
     "+15555550103"
   ]
@@ -120,7 +123,7 @@ SIGNALWIRE_FROM_NUMBER=+1XXXXXXXXXX
 Create a `units.json` file in the root of the project:
 ```json
 {
-  "123 Unit A": ["+1XXXXXXXXXX"]
+  "123A": ["+1XXXXXXXXXX"]
 }
 ```
 
